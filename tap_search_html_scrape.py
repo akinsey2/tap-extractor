@@ -9,9 +9,9 @@ from bs4 import BeautifulSoup as bs
 from time import sleep
 from random import uniform
 import logging
-import boto3
-import boto3.session
-import botocore
+# import boto3
+# import boto3.session
+# import botocore
 
 USE_AWS = False
 
@@ -49,14 +49,13 @@ def create_session():
     return sess1
 
 
-def crawl_search_url_data(sess1, sess_logs):
+def crawl_search_url_data(sess1):
     """
     Crawls to find the proper "base" URL for TAP aircraft search
     Starts at robots.txt, finds sitemap index XML page, then aircraft sitemap XML page
     Finds and returns "base URL" for aircraft search
     Also constructs and returns list of TAP's "aircraft category" names
 
-    :param sess_logs: Python list for temp storage of logging statements
     :param sess1: requests.Session object for current server Session
 
     :return:
@@ -68,29 +67,28 @@ def crawl_search_url_data(sess1, sess_logs):
     # Try to read robots.txt
     try:
         robots_resp = sess1.get("https://www.trade-a-plane.com/robots.txt")
-    except Exception as err:
-        logging.error("Exception trying to reach robots.txt" + str(err))
+    except Exception as err1:
+        logging.error("Exception trying to reach robots.txt \n" + str(err1) +
+                      "\n Assuming sitemap_index_url is 'https://www.trade-a-plane.com/sitemap_index.xml'")
         sitemap_index_url = "https://www.trade-a-plane.com/sitemap_index.xml"
-        logging.info("Assuming sitemap_index_url is 'https://www.trade-a-plane.com/sitemap_index.xml'")
     else:
         if robots_resp.status_code == 200:
             match1 = re.search(r"sitemap: (\S+)", robots_resp.text)
             sitemap_index_url = match1.group(1)
-            logging.info(f"Traversing robots.txt --> \nFound sitemap index: '{sitemap_index_url}' -->")
+            logging.info(f"Traversing robots.txt --> Found sitemap index: '{sitemap_index_url}' -->")
         else:
             logging.warning(f"robots.txt non-standard HTTP response: {robots_resp.status_code}\n" +
-                             robots_resp.text)
+                            robots_resp.text +
+                            "\nAssuming sitemap_index_url is 'https://www.trade-a-plane.com/sitemap_index.xml'")
             sitemap_index_url = "https://www.trade-a-plane.com/sitemap_index.xml"
-            logging.info("Assuming sitemap_index_url is 'https://www.trade-a-plane.com/sitemap_index.xml'")
 
     # Try to read sitemap index XML
     try:
         sitemap_index_resp = sess1.get(sitemap_index_url)
-    except Exception as err:
-        sess_logs.append("Error: Exception trying to reach sitemap index URL")
-        sess_logs.append(str(err))
+    except Exception as err1:
+        logging.error("Exception trying to reach sitemap index URL \n" + str(err1) +
+                      "\nAssuming acft_sitemap_url is 'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml'")
         acft_sitemap_url = "https://www.trade-a-plane.com/sitemap_aircraft_results1.xml"
-        sess_logs.append("Assuming acft_sitemap_url is 'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml'")
     else:
 
         # If sitemap_index_url HTTP Response is "OK"
@@ -109,21 +107,21 @@ def crawl_search_url_data(sess1, sess_logs):
 
                 if 'aircraft' in sitemap[0].text:
                     acft_sitemap_url = sitemap[0].text
-                    sess_logs.append(f"Found aircraft sitemap: '{acft_sitemap_url}' -->")
+                    logging.info(f"Found aircraft sitemap: '{acft_sitemap_url}' -->")
                     break
 
             if not acft_sitemap_url:
-                sess_logs.append("Error: Could not find 'aircraft' sitemap URL in sitemap index XML file.")
+                logging.error("Could not find 'aircraft' sitemap URL in sitemap index XML file." +
+                              "\nAssuming 'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml' -->")
                 acft_sitemap_url = "https://www.trade-a-plane.com/sitemap_aircraft_results1.xml"
-                sess_logs.append("Assuming 'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml' -->")
 
         # If sitemap_index_url HTTP response is NOT "OK"
         else:
-            sess_logs.append(f"Error: sitemap_index_url non-standard HTTP response: {sitemap_index_resp.status_code}\n"
-                             + sitemap_index_resp.text)
+            logging.warning(f"sitemap_index_url non-standard HTTP response: {sitemap_index_resp.status_code}\n"
+                            + sitemap_index_resp.text +
+                            "\nAssuming acft_sitemap_url is " +
+                            "'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml'")
             acft_sitemap_url = "https://www.trade-a-plane.com/sitemap_aircraft_results1.xml"
-            sess_logs.append("Assuming acft_sitemap_url is " +
-                             "'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml'")
 
     search_url = ""
     acft_types_crawled = []
@@ -131,14 +129,14 @@ def crawl_search_url_data(sess1, sess_logs):
     # Try to read aircraft sitemap XML
     try:
         acft_sitemap_resp = sess1.get(acft_sitemap_url)
-    except Exception as err:
-        sess_logs.append("Error: Exception trying to reach aircraft sitemap URL")
-        sess_logs.append(str(err))
+    except Exception as err1:
+        logging.error("Exception trying to reach aircraft sitemap URL \n" +
+                      str(err1) +
+                      "Assuming search_url is 'https://www.trade-a-plane.com/search'")
         search_url = "https://www.trade-a-plane.com/search"
         acft_types_crawled = ["Single+Engine+Piston", "Multi+Engine+Piston", "Turboprop", "Jets",
                               "Gliders+|+Sailplanes", "Rotary+Wing",
                               "Piston+Helicopters", "Turbine+Helicopters", "Balloons++|++Airships"]
-        sess_logs.append("Assuming search_url is 'https://www.trade-a-plane.com/search'")
     else:
         # If aircraft sitemap returns HTTP response "OK"
         if acft_sitemap_resp.status_code == 200:
@@ -154,7 +152,7 @@ def crawl_search_url_data(sess1, sess_logs):
                     match1 = re.search(r"https://.+\?", child[0].text)
                     if match1:
                         search_url = match1.group(0)[:-1]
-                        sess_logs.append(f"Found base search URL: '{search_url}'")
+                        logging.info(f"Found base search URL: '{search_url}'")
 
                 # Populate "aircraft types" list
                 match2 = re.search(r"cat.*?=(.*?)&", child[0].text)
@@ -163,42 +161,43 @@ def crawl_search_url_data(sess1, sess_logs):
                         acft_types_crawled.append(match2.group(1))
 
             if not search_url:
-                sess_logs.append("Error: Could not find base search URL in aircraft sitemap.")
+                logging.error("Could not find base search URL in aircraft sitemap. " +
+                              "Assuming search_url = 'https://www.trade-a-plane.com/search'")
                 search_url = "https://www.trade-a-plane.com/search"
-                sess_logs.append("Assuming search_url = 'https://www.trade-a-plane.com/search'")
 
             if acft_types_crawled:
-                sess_logs.append(f"Found Aircraft Categories:")
-                for a_t in acft_types_crawled:
-                    sess_logs.append(f"'{a_t}'")
+                logging.info(f"Found Aircraft Categories:\n" + str(acft_types_crawled))
+                # for a_t in acft_types_crawled:
+                #     logging.info(f"'{a_t}'")
             else:
-                sess_logs.append(f"Error: Could not find Aircraft Categories.  Assuming standard names.")
                 acft_types_crawled = ["Single+Engine+Piston", "Multi+Engine+Piston", "Turboprop", "Jets",
                                       "Gliders+|+Sailplanes", "Rotary+Wing",
                                       "Piston+Helicopters", "Turbine+Helicopters", "Balloons++|++Airships"]
+                logging.warning("Could not find Aircraft Categories.  Assuming the following categories:\n" +
+                                str(acft_types_crawled))
 
         # If aircraft sitemap returns HTTP response NOT "OK"
         else:
-            sess_logs.append(f"Error: acft_sitemap_url non-standard HTTP response: {acft_sitemap_resp.status_code}\n" +
-                             acft_sitemap_resp.text)
+            logging.warning(f"acft_sitemap_url non-standard HTTP response: {acft_sitemap_resp.status_code}\n" +
+                            acft_sitemap_resp.text)
             search_url = "https://www.trade-a-plane.com/search"
-            sess_logs.append("Assuming search_url is 'https://www.trade-a-plane.com/search' " +
-                             "with standard aircraft category names")
             acft_types_crawled = ["Single+Engine+Piston", "Multi+Engine+Piston", "Turboprop", "Jets",
                                   "Gliders+|+Sailplanes", "Rotary+Wing",
                                   "Piston+Helicopters", "Turbine+Helicopters", "Balloons++|++Airships"]
+            logging.info("Assuming search_url is 'https://www.trade-a-plane.com/search' " +
+                         "with the following aircraft category names:\n" +
+                         str(acft_types_crawled))
 
-    return search_url, acft_types_crawled, sess_logs
+    return search_url, acft_types_crawled
 
 
-def get_search_page(sess, url1, search_params, sess_logs):
+def get_search_page(sess, url1, search_params):
     """
     Retrieves a single HTML search results page
 
     :param sess: requests.Session object for current server Session
     :param url1: string, "base" search URL without request params
     :param search_params: dict of strs, URL arguments/parameters for GET request
-    :param sess_logs: Python list for temp storage of logging statements
 
     :return: requests.Response object of single HTML page
     """
@@ -213,22 +212,21 @@ def get_search_page(sess, url1, search_params, sess_logs):
 
     try:
         response = sess.send(prep_req)
-    except Exception as err:
-        sess_logs.append(f"Error: Exception trying to reach page #{search_params['s-page']} at '{prep_req.url}'")
-        sess_logs.append(str(err))
+    except Exception as err1:
+        logging.error(f"Exception trying to reach page #{search_params['s-page']} at '{prep_req.url}'\n" + str(err1))
         response = False
     else:
         if response.status_code == 200:
-            sess_logs.append(f"Retrieved page #{search_params['s-page']} successfully at '{prep_req.url}'")
+            logging.info(f"Retrieved page #{search_params['s-page']} successfully at '{prep_req.url}'")
         else:
-            sess_logs.append(f"Error: when sending request: '{prep_req.url}'\n" +
-                             f"received non-standard HTML response: {response.status_code}\n" +
-                             response.text)
+            logging.warning(f"Error: when sending request: '{prep_req.url}'\n" +
+                            f"received non-standard HTML response: {response.status_code}\n" +
+                            response.text)
 
-    return response, sess_logs
+    return response
 
 
-def write_html_file(response, search_params, sess_logs, acft_type=""):
+def write_html_file(response, search_params, acft_type=""):
     """
     Writes a retrieved 'requests.Response' object to an HTML file on disk
 
@@ -242,10 +240,10 @@ def write_html_file(response, search_params, sess_logs, acft_type=""):
 
     acft_type_str = re.sub(r"[^A-Za-z0-9]", "", acft_type)
     now = datetime.now()
-    time_str = now.strftime("%Y-%m-%d_%Hh%Mm%Ss")
+    time_str1 = now.strftime("%Y-%m-%d_%Hh%Mm%Ss")
 
     filename = ''.join(["tap_search_", search_params["s-type"], "_", acft_type_str,
-                        "_pg", str(search_params["s-page"]), "_", time_str, ".htm"])
+                        "_pg", str(search_params["s-page"]), "_", time_str1, ".htm"])
     full_file_path = ''.join([HTML_FILE_PATH, filename])
 
     resp_enc = response.encoding.lower()
@@ -254,11 +252,11 @@ def write_html_file(response, search_params, sess_logs, acft_type=""):
     with open(full_file_path, mode='w', encoding=resp_enc) as file1:
         try:
             chars_written = file1.write(response.text)
-        except Exception as err:
-            sess_logs.append(f"Error writing {filename} at {time_str}.  Details:")
-            sess_logs.append(str(err))
+        except Exception as err1:
+            logging.error(f"Error writing {filename} at {time_str1}.  Details:\n" +
+                          str(err1))
         else:
-            sess_logs.append(f"Wrote {full_file_path} to file")
+            logging.info(f"Wrote {full_file_path} to file")
     assert chars_written > 0
 
     # DEBUG
@@ -266,57 +264,11 @@ def write_html_file(response, search_params, sess_logs, acft_type=""):
 
     # FINISH AWS CALL
     if USE_AWS:
-        aws_success = upload_to_S3(HTML_FILE_PATH, filename)
+        # aws_success = upload_to_S3(HTML_FILE_PATH, filename)
         pass
 
-    return sess_logs
 
-
-def update_log_file(sess_logs, logs_filename=""):
-    """
-    Writes session logs to .txt file on disk
-
-    :param sess_logs: Python list of log entry strings
-    :param logs_filename: str, if the logs file already exists, the full filename string
-
-    :return: None
-    """
-    now = datetime.now()
-    time_str = now.strftime("%Y-%m-%d_%HH%MM%SS")
-
-    if not logs_filename:
-        logs_filename = ''.join(["tap_html_search_scrape_log_", time_str, ".txt"])
-
-    logs_full_file_path = ''.join([LOG_FILE_PATH, logs_filename])
-
-    # INSERT error handling
-    with open(logs_full_file_path, mode='a') as log_file:
-        try:
-            chars_written = log_file.write('\n'.join(sess_logs))
-        except Exception as err:
-            print(f"Error writing log file to {logs_full_file_path}")
-            print(str(err))
-            print("Logs thus far:")
-            print('\n'.join(sess_logs))
-            sess_logs.clear()
-        else:
-            sess_logs.clear()
-            sess_logs.append(f"Wrote latest logs to file {logs_full_file_path} at {time_str} file")
-
-    assert chars_written > 0
-
-    # DEBUG
-    print(f"Wrote {logs_full_file_path} to file")
-
-    # FINISH AWS CALL
-    if USE_AWS:
-        aws_success = upload_to_S3(HTML_FILE_PATH, filename)
-        pass
-
-    return sess_logs, logs_filename
-
-
-def upload_to_S3(path, filename):
+def upload_to_s3(path, filename):
     """ Take a saved file and upload to S3
 
     :param path: str, path in local filesystem
@@ -361,24 +313,21 @@ def scrape_tap_search_html():
     sess_logs = []
 
     now = datetime.now()
-    time_str = now.strftime("%Y-%m-%d_%HH%MM%SS")
-    sess_logs.append("Scraping TAP HTML v1 begun " + time_str)
+    time_str1 = now.strftime("%Y-%m-%d_%HH%MM%SS")
+    logging.info("Scraping TAP HTML v1 begun " + time_str1)
 
     # Create Requests Session
     try:
         sess1 = create_session()
-    except Exception as err:
-        sess_logs.append("Error: Exception trying to create Requests Session.")
-        sess_logs.append(str(err))
-        update_log_file(sess_logs)
+    except Exception as err1:
+        logging.error("Exception trying to create Requests Session.\n" +
+                      str(err1))
         return
     else:
-        sess_logs.append("Requests Session Created.")
+        logging.info("Requests Session Created.")
 
     # Get "root" search URL
-    search_url, acft_types_crawled, sess_logs = crawl_search_url_data(sess1, sess_logs)
-
-    sess_logs, logs_filename = update_log_file(sess_logs)
+    search_url, acft_types_crawled = crawl_search_url_data(sess1)
 
     wait = AVG_REQ_DELAY + uniform(-(AVG_REQ_DELAY/2), AVG_REQ_DELAY/2)
     wait_time_total = wait_time_total + wait
@@ -387,7 +336,7 @@ def scrape_tap_search_html():
     # Retrieve first page
 
     search_params = {"s-type": "aircraft", "s-page": 1}
-    tap_resp1, sess_logs = get_search_page(sess1, search_url, search_params, sess_logs)
+    tap_resp1 = get_search_page(sess1, search_url, search_params)
 
     # Parse HTML using BeautifulSoup library
     soup1 = bs(tap_resp1.text, "lxml")
@@ -413,12 +362,9 @@ def scrape_tap_search_html():
 
     search_params.update({"s-page": 1})
 
-    sess_logs.append("Found the following search parameters:")
-    sess_logs.append(str(search_params))
+    logging.info("Found the following search parameters:" + str(search_params))
     total_results = num_of_posts(tap_resp1)
-    sess_logs.append(f"Total results found: {total_results}")
-
-    sess_logs, logs_filename = update_log_file(sess_logs, logs_filename)
+    logging.info(f"Total results found: {total_results}")
 
     # Iterate to retrieve and store all HTML search pages
     current_page = 1
@@ -429,21 +375,19 @@ def scrape_tap_search_html():
 
         search_params["s-page"] = current_page
 
-        page_resp, sess_logs = get_search_page(sess1, search_url, search_params, sess_logs)
+        page_resp = get_search_page(sess1, search_url, search_params)
 
-        sess_logs = write_html_file(page_resp, search_params, sess_logs)
+        write_html_file(page_resp, search_params)
 
         # Update for next iteration
         total_results = num_of_posts(page_resp)
         current_page = current_page + 1
 
     sess1.close()   # Close adapter and connection session
-    sess_logs.append(f"Scraped and Saved {current_page-1} search page results")
-    sess_logs.append(f"Total Wait Time: {wait_time_total:.3f} (seconds)")
+    logging.info(f"Scraped and Saved {current_page-1} search page results")
+    logging.info(f"Total Wait Time: {wait_time_total:.3f} (seconds)")
     total_time = datetime.now() - start_time
-    sess_logs.append(f"Total Time Elapsed: {total_time} (hours:min:secs)")
-
-    update_log_file(sess_logs, logs_filename)
+    logging.info(f"Total Time Elapsed: {total_time} (hours:min:secs)")
 
     print(f"SUCCESS: TAP HTML scrape of {current_page-1} pages in {total_time} (hours:min:secs).")
 
@@ -465,11 +409,13 @@ if __name__ == '__main__':
     time_str = datetime.now().strftime("%Y-%m-%d_%HH%MM%SS")
     logs_filename = ''.join(["tap_html_search_scrape_log_", time_str, ".txt"])
     logs_full_file_path = ''.join([LOG_FILE_PATH, logs_filename])
+
     logging.basicConfig(filename=logs_full_file_path,
                         filemode="a",
                         style="{",
                         datefmt="%Y-%m-%d %H:%M:%S UTC%z",
-                        format="{asctime} {levelname} {message}"
+                        format="{asctime} {levelname} {message}",
+                        level=logging.DEBUG
                         )
 
     scrape_tap_search_html()
