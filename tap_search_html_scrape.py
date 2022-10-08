@@ -3,25 +3,27 @@
 import requests
 import re
 from datetime import datetime
+from time import time
 from urllib.parse import urlencode
 import xml.etree.ElementTree as xmlET
 from bs4 import BeautifulSoup as bs
 from time import sleep
 from random import uniform
 import logging
-# import boto3
-# import boto3.session
-# import botocore
+import boto3
+from botocore.exceptions import ClientError
 
-USE_AWS = False
+TEST = True
+USE_AWS = True
 
 # Need to update every ~6 months!
 USER_AGENT_STRING = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0"
 # Other constants
 HTML_FILE_PATH = "C:\\Users\\Stephanie\\Documents\\Machine Learning\\Web Scraping\\Trade-A-Plane\\tap_html_files\\"
-HTML_SEARCH_BUCKET_PATH = "tap_html/search_pages/"
+BUCKET_NAME = "aviation-db"
+TAP_SEARCH_HTML_BUCKET_PATH = "tap_html/search_pages/"
 LOG_FILE_PATH = "C:\\Users\\Stephanie\\Documents\\Machine Learning\\Web Scraping\\Trade-A-Plane\\tap_html_files\\Logs\\"
-HTML_SEARCH_LOG_BUCKET_PATH = "tap_html/search_pages/logs"
+HTML_SEARCH_LOG_BUCKET_PATH = "tap_html/search_pages/logs/"
 AVG_REQ_DELAY = 4.0
 
 
@@ -232,7 +234,6 @@ def write_html_file(response, search_params, acft_type=""):
 
     :param response: requests.Response object of HTML page
     :param search_params: dict of strs, URL arguments/parameters for GET request
-    :param sess_logs: Python list for temp storage of logging statements
     :param acft_type: string, one of TAP's aircraft categories, if desired
 
     :return: None
@@ -262,32 +263,63 @@ def write_html_file(response, search_params, acft_type=""):
     # DEBUG
     print(f"Wrote {full_file_path} to file")
 
-    # FINISH AWS CALL
-    if USE_AWS:
-        # aws_success = upload_to_S3(HTML_FILE_PATH, filename)
-        pass
+    return full_file_path, filename
 
 
-def upload_to_s3(path, filename):
+def upload_to_s3(full_file_path, filename):
     """ Take a saved file and upload to S3
 
-    :param path: str, path in local filesystem
+    :param full_file_path: str, /full_path/filename in local filesystem
     :param filename: str
     :return: bool, True if Successful, False otherwise
     """
 
     # FINISH THIS FUNCTION
+    s3_client = aws_sess.client('s3')
+
+    # CHANGE OBJECT KEY/FOLDER for LOG files
+    object_key = "".join([TAP_SEARCH_HTML_BUCKET_PATH, filename])
+
     try:
-        pass
-    except botocore.exceptions.ParamValidationError as err:
-        pass
-        return False
-    except botocore.exceptions.ClientError as err:
-        pass
+        response = s3_client.upload_file(full_file_path, BUCKET_NAME, object_key)
+    except ClientError as err1:
+        logging.error("Could not upload file to s3" + str(err))
         return False
     else:
-        pass
-        return True
+        logging.info(f"Wrote '{object_key}' to S3 Bucket '{BUCKET_NAME}'")
+    return True
+
+
+def extract_search_params(response):
+    """Take first HTML response to generic /search and extract best search query params to use for requests
+
+    :param response: requests.Response object, from generic GET request to '/search'
+
+    :return: dict of strs, a dict of HTTP query 'params' that can be passed into requests.get()
+    """
+    # Parse HTML using BeautifulSoup library
+    soup1 = bs(response.text, "lxml")
+
+    # Get Sort_key and sort-order options programmatically
+    select_sort_options = soup1.find(name="select", class_="sort_options")
+    last_updtd_asc_sort_option = select_sort_options.find_all(name="option",
+                                                              value=re.compile("asc"),
+                                                              string=re.compile("Last Updated"))
+    last_updtd_asc_url_str = last_updtd_asc_sort_option[0]["value"]
+    all_params = last_updtd_asc_url_str.split(sep="?")[1]
+    params = all_params.split(sep="&")
+    # Combine into dict
+    search_params = {param.split("=")[0]: param.split("=")[1] for param in params}
+
+    # Get max page size programmatically
+    select_results_shown = soup1.find(name="select", class_="results_shown")
+    max_results_shown_option = select_results_shown.find_all(name="option")[-1]
+    max_res_per_page = int(max_results_shown_option.string)
+
+    max_results_url_params = max_results_shown_option["value"].split("?")[-1].split("&")[-1].split("=")
+    search_params.update({max_results_url_params[0]: max_results_url_params[1]})
+
+    return search_params
 
 
 def num_of_posts(response):
@@ -296,7 +328,6 @@ def num_of_posts(response):
     :param response: 'requests.Response' object
     :return: int - number of search results found
     """
-
     match = re.search(r"(\d*),?(\d+)\s+results found", response.text)
     num_listings = int(match.group(1) + match.group(2))  # Convert string(s) to int
     return num_listings
@@ -334,42 +365,23 @@ def scrape_tap_search_html():
     sleep(wait)
 
     # Retrieve first page
-
-    search_params = {"s-type": "aircraft", "s-page": 1}
+    search_params = {"s-type": "aircraft", "s-page": 1}     # Hard-coded initial query params
     tap_resp1 = get_search_page(sess1, search_url, search_params)
 
-    # Parse HTML using BeautifulSoup library
-    soup1 = bs(tap_resp1.text, "lxml")
-
-    # Get Sort_key and sort-order options programmatically
-    select_sort_options = soup1.find(name="select", class_="sort_options")
-    last_updtd_asc_sort_option = select_sort_options.find_all(name="option",
-                                                              value=re.compile("asc"),
-                                                              string=re.compile("Last Updated"))
-    last_updtd_asc_url_str = last_updtd_asc_sort_option[0]["value"]
-    all_params = last_updtd_asc_url_str.split(sep="?")[1]
-    params = all_params.split(sep="&")
-    # Combine into dict
-    search_params = {param.split("=")[0]: param.split("=")[1] for param in params}
-
-    # Get max page size programmatically
-    select_results_shown = soup1.find(name="select", class_="results_shown")
-    max_results_shown_option = select_results_shown.find_all(name="option")[-1]
-    max_res_per_page = int(max_results_shown_option.string)
-
-    max_results_url_params = max_results_shown_option["value"].split("?")[-1].split("&")[-1].split("=")
-    search_params.update({max_results_url_params[0]: max_results_url_params[1]})
+    search_params = extract_search_params(tap_resp1)
 
     search_params.update({"s-page": 1})
-
     logging.info("Found the following search parameters:" + str(search_params))
     total_results = num_of_posts(tap_resp1)
     logging.info(f"Total results found: {total_results}")
 
     # Iterate to retrieve and store all HTML search pages
     current_page = 1
+    max_res_per_page = int(search_params["s-page_size"])
+    waited = 0
+
     while (current_page*max_res_per_page - total_results) < max_res_per_page:
-        wait = AVG_REQ_DELAY + uniform(-(AVG_REQ_DELAY/2), AVG_REQ_DELAY/2)
+        wait = AVG_REQ_DELAY + uniform(-(AVG_REQ_DELAY/2), AVG_REQ_DELAY/2) - waited
         wait_time_total = wait_time_total + wait
         sleep(wait)
 
@@ -377,17 +389,29 @@ def scrape_tap_search_html():
 
         page_resp = get_search_page(sess1, search_url, search_params)
 
-        write_html_file(page_resp, search_params)
+        full_file_path, filename = write_html_file(page_resp, search_params)
+
+        waited = 0
+        if USE_AWS:
+            aws_start = time()
+            success = upload_to_s3(full_file_path, filename)
+            waited = time() - aws_start
 
         # Update for next iteration
         total_results = num_of_posts(page_resp)
         current_page = current_page + 1
 
+        if TEST:
+            break
+
     sess1.close()   # Close adapter and connection session
-    logging.info(f"Scraped and Saved {current_page-1} search page results")
-    logging.info(f"Total Wait Time: {wait_time_total:.3f} (seconds)")
     total_time = datetime.now() - start_time
-    logging.info(f"Total Time Elapsed: {total_time} (hours:min:secs)")
+    logging.info(f"\nScraped and Saved {current_page-1} search page results" +
+                 f"\nTotal Wait Time: {wait_time_total:.3f} (seconds)" +
+                 f"\nTotal Time Elapsed: {total_time} (hours:min:secs)")
+
+    if USE_AWS:
+        success = upload_to_s3(logs_full_file_path, logs_filename)
 
     print(f"SUCCESS: TAP HTML scrape of {current_page-1} pages in {total_time} (hours:min:secs).")
 
@@ -399,10 +423,7 @@ if __name__ == '__main__':
     if USE_AWS:
         try:
             aws_sess = boto3.session.Session()
-        except botocore.exceptions.ParamValidationError as err:
-            # FINISH ERROR HANDLING
-            pass
-        except botocore.exceptions.ClientError as err:
+        except ClientError as err:
             # FINISH ERROR HANDLING
             pass
 
@@ -413,7 +434,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename=logs_full_file_path,
                         filemode="a",
                         style="{",
-                        datefmt="%Y-%m-%d %H:%M:%S UTC%z",
+                        datefmt="%Y-%m-%d %H:%M:%S   UTC%z",
                         format="{asctime} {levelname} {message}",
                         level=logging.DEBUG
                         )

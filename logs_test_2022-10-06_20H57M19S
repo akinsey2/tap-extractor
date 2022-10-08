@@ -1,0 +1,23 @@
+2022-10-06 20:57:19 UTC-0400 INFO Scraping TAP HTML v1 begun 2022-10-06_20H57M19S
+2022-10-06 20:57:19 UTC-0400 INFO Requests Session Created.
+2022-10-06 20:57:19 UTC-0400 DEBUG Starting new HTTPS connection (1): www.trade-a-plane.com:443
+2022-10-06 20:57:20 UTC-0400 DEBUG https://www.trade-a-plane.com:443 "GET /robots.txt HTTP/1.1" 200 571
+2022-10-06 20:57:20 UTC-0400 INFO Traversing robots.txt --> Found sitemap index: 'https://www.trade-a-plane.com/sitemap_index.xml' -->
+2022-10-06 20:57:20 UTC-0400 DEBUG https://www.trade-a-plane.com:443 "GET /sitemap_index.xml HTTP/1.1" 200 1233
+2022-10-06 20:57:20 UTC-0400 INFO Found aircraft sitemap: 'https://www.trade-a-plane.com/sitemap_aircraft_results1.xml' -->
+2022-10-06 20:57:20 UTC-0400 DEBUG https://www.trade-a-plane.com:443 "GET /sitemap_aircraft_results1.xml HTTP/1.1" 200 258803
+2022-10-06 20:57:20 UTC-0400 INFO Found base search URL: 'https://www.trade-a-plane.com/search'
+2022-10-06 20:57:20 UTC-0400 INFO Found Aircraft Categories:
+['Balloons++%7C++Airships', 'Gliders+%7C+Sailplanes', 'Jets', 'Multi+Engine+Piston', 'Piston+Helicopters', 'Rotary+Wing', 'Single+Engine+Piston', 'Turbine+Helicopters', 'Turboprop']
+2022-10-06 20:57:25 UTC-0400 DEBUG Resetting dropped connection: www.trade-a-plane.com
+2022-10-06 20:57:29 UTC-0400 DEBUG https://www.trade-a-plane.com:443 "GET /search?s-type=aircraft&s-page=1 HTTP/1.1" 200 33001
+2022-10-06 20:57:29 UTC-0400 INFO Retrieved page #1 successfully at 'https://www.trade-a-plane.com/search?s-type=aircraft&s-page=1'
+2022-10-06 20:57:29 UTC-0400 INFO Found the following search parameters:{'s-type': 'aircraft', 's-page': 1, 's-sort_key': 'days_since_update', 's-sort_order': 'asc', 's-page_size': '96'}
+2022-10-06 20:57:29 UTC-0400 INFO Total results found: 2796
+2022-10-06 20:57:32 UTC-0400 DEBUG Resetting dropped connection: www.trade-a-plane.com
+2022-10-06 20:57:35 UTC-0400 DEBUG https://www.trade-a-plane.com:443 "GET /search?s-type=aircraft&s-page=1&s-sort_key=days_since_update&s-sort_order=asc&s-page_size=96 HTTP/1.1" 200 None
+2022-10-06 20:57:35 UTC-0400 INFO Retrieved page #1 successfully at 'https://www.trade-a-plane.com/search?s-type=aircraft&s-page=1&s-sort_key=days_since_update&s-sort_order=asc&s-page_size=96'
+2022-10-06 20:57:35 UTC-0400 INFO Wrote C:\Users\Stephanie\Documents\Machine Learning\Web Scraping\Trade-A-Plane\tap_html_files\tap_search_aircraft__pg1_2022-10-06_20h57m35s.htm to file
+2022-10-06 20:57:35 UTC-0400 INFO Scraped and Saved 1 search page results
+2022-10-06 20:57:35 UTC-0400 INFO Total Wait Time: 7.769 (seconds)
+2022-10-06 20:57:35 UTC-0400 INFO Total Time Elapsed: 0:00:16.054076 (hours:min:secs)
